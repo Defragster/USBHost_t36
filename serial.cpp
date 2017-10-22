@@ -45,6 +45,7 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 	println("USBSerial claim this=", (uint32_t)this, HEX);
 	print("vid=", dev->idVendor, HEX);
 	println(", pid=", dev->idProduct, HEX);
+	print_hexbytes(descriptors, len);
 	if (type == 0) {
 		if (dev->idVendor == 0x0403 && dev->idProduct == 0x6001) {
 			// FTDI FT232
@@ -91,7 +92,68 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 			control_queued = true;
 			return true;
 		}
+		if (dev->idVendor == 0x67B && dev->idProduct == 0x2303) {
+			// Prolific Technology, Inc. PL2303 Serial Port
+			println("len = ", len);
+			uint8_t count_end_points = descriptors[4];
+			if (count_end_points < 2) return false; // not enough end points
+			if (len < 23) return false;
+			if (descriptors[0] != 9) return false; // length 9
+
+			// Lets walk through end points and see if we 
+			// can find an RX and TX bulk transfer end point.
+			//vid=67B, pid=2303
+			// 0  1  2  3  4  5  6  7  8  9 10  1  2  3  4  5  6  7  8  9 20  1  2  3  4  5  6  7  8  9
+			//09 04 00 00 03 FF 00 00 00 07 05 81 03 0A 00 01 07 05 02 02 40 00 00 07 05 83 02 40 00 00 
+			uint32_t rxep = 0;
+			uint32_t txep = 0;
+			uint16_t descriptor_index = 9; 
+			while (count_end_points-- && ((rxep == 0) || txep == 0)) {
+				if (descriptors[descriptor_index] != 7) return false; // length 7
+				if (descriptors[descriptor_index+1] != 5) return false; // ep desc
+				if ((descriptors[descriptor_index+3] == 2) 
+					&& (descriptors[descriptor_index+4] == 64)
+					&& (descriptors[descriptor_index+5] == 0)) {
+					// have a bulk EP size 
+					if (descriptors[descriptor_index+2] & 0x80 ) {
+						rxep = descriptors[descriptor_index+2]; 
+					} else {
+						txep = descriptors[descriptor_index+2]; 
+					}
+				} 
+				descriptor_index += 7;  // setup to look at next one...
+			}
+			// Try to verify the end points. 
+			if (!check_rxtx_ep(rxep, txep)) return false;
+			print("FTDI, rxep=", rxep & 15);
+			println(", txep=", txep);
+			if (!init_buffers(64, 64)) return false;
+			rxpipe = new_Pipe(dev, 2, rxep & 15, 1, 64);
+			if (!rxpipe) return false;
+			txpipe = new_Pipe(dev, 2, txep, 0, 64);
+			if (!txpipe) {
+				// TODO: free rxpipe
+				return false;
+			}
+			sertype = PL2303;
+			rxpipe->callback_function = rx_callback;
+			queue_Data_Transfer(rxpipe, rx1, 64, this);
+			rxstate = 1;
+			if (rxsize > 128) {
+				queue_Data_Transfer(rxpipe, rx2, 64, this);
+				rxstate = 3;
+			}
+			txstate = 0;
+			txpipe->callback_function = tx_callback;
+			baudrate = 115200;
+			pending_control = 0x0F;
+			mk_setup(setup, 0x40, 0, 0, 0, 0); // reset port
+			queue_Control_Transfer(dev, &setup, NULL, this);
+			control_queued = true;
+			return true;
+		}
 	}
+
 	return false;
 }
 
@@ -146,7 +208,7 @@ void USBSerial::disconnect()
 
 void USBSerial::control(const Transfer_t *transfer)
 {
-	println("control callback (serial)");
+	println("control callback (serial)", pending_control, HEX);
 	control_queued = false;
 
 	// set data format
