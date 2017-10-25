@@ -56,7 +56,7 @@
 // your best effort to read chapter 4 before asking USB questions!
 
 
-#define USBHOST_PRINT_DEBUG
+//#define USBHOST_PRINT_DEBUG
 
 /************************************************/
 /*  Data Types                                  */
@@ -941,6 +941,7 @@ private:
 	volatile uint8_t  rxstate;// bitmask: which receive packets are queued
 	volatile uint8_t  txstate;
 	uint8_t pending_control;
+	uint8_t interface;
 	bool control_queued;
 	enum { CDCACM, FTDI, PL2303, CH341 } sertype;
 };
