@@ -203,11 +203,8 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 			txstate = 0;
 			txpipe->callback_function = tx_callback;
 			baudrate = 115200;
-#if 0
-			mk_setup(setup, 0x40, 0, 0, 0, 0); // reset port
-			queue_Control_Transfer(dev, &setup, NULL, this);
-			pending_control = 0x6;	// Lets setup to do a few different ones
-#else
+			// Wish I could just call Control to do the output... Maybe can defer until the user calls begin()
+			// control requires that device is setup which is not until this call completes...
 			println("Control - CDCACM LINE_CODING");
 			setupdata[0] = 0;  // Setup baud rate 115200 - 0x1C200
 			setupdata[1] = 0xc2;
@@ -219,11 +216,10 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 			mk_setup(setup, 0x21, 0x20, 0, interface, 7);
 			queue_Control_Transfer(dev, &setup, setupdata, this);
 			pending_control = 0x04;	// Maybe don't need to do...
-#endif			
 			control_queued = true;
 			return true;
 		}
-
+#if 0
 		if (dev->idVendor == 0x67B && dev->idProduct == 0x2303) {
 			// Prolific Technology, Inc. PL2303 Serial Port
 			println("len = ", len);
@@ -284,8 +280,9 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 			control_queued = true;
 			return true;
 		}
+#endif
 	} else if (type != 1) return false;
-#if 0
+#if 1
 	// Try some ttyACM types? 
 	// This code may be similar to MIDI code. 
 	// But first pass see if we can simply look at the interface...
@@ -320,6 +317,8 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 	if (descriptors[20] > 64) return false; // size 64 Max
 	if (descriptors[21] != 0) return false;
 	if (!check_rxtx_ep(rxep, txep)) return false;
+	interface = descriptors[2];
+
 	print("CDC, rxep=", rxep & 15);
 	println(", txep=", txep);
 	if (!init_buffers(rxsize, txsize)) return false;
@@ -340,10 +339,20 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 	}
 	txstate = 0;
 	txpipe->callback_function = tx_callback;
+
+	// See if we can do just the inteface...
 	baudrate = 115200;
-	pending_control = 0x0F;
-	mk_setup(setup, 0x40, 0, 0, 0, 0); // reset port
-	queue_Control_Transfer(dev, &setup, NULL, this);
+	println("Control - CDCACM LINE_CODING");
+	setupdata[0] = 0;  // Setup baud rate 115200 - 0x1C200
+	setupdata[1] = 0xc2;
+	setupdata[2] = 0x1;
+	setupdata[3] = 0;
+    setupdata[4] = 0; // 0 - 1 stop bit, 1 - 1.5 stop bits, 2 - 2 stop bits
+    setupdata[5] = 0; // 0 - None, 1 - Odd, 2 - Even, 3 - Mark, 4 - Space
+    setupdata[6] = 8; // Data bits (5, 6, 7, 8 or 16)
+	mk_setup(setup, 0x21, 0x20, 0, interface, 7);
+	queue_Control_Transfer(dev, &setup, setupdata, this);
+	pending_control = 0x04;	// Maybe don't need to do...
 	control_queued = true;
 	return true;
 #else
@@ -419,18 +428,17 @@ void USBSerial::control(const Transfer_t *transfer)
 			control_queued = true;
 
 		} else if (sertype == CDCACM) {
-#if 1
-			setupdata[0] = 0;  // Setup baud rate 115200 - 0x1C200
-			setupdata[1] = 0xc2;
-			setupdata[2] = 0x1;
-			setupdata[3] = 0;
+			// Should probably use data structure, but that may depend on byte ordering...
+			setupdata[0] = (baudrate) & 0xff;  // Setup baud rate 115200 - 0x1C200
+			setupdata[1] = (baudrate >> 8) & 0xff;
+			setupdata[2] = (baudrate >> 16) & 0xff;
+			setupdata[3] = (baudrate >> 24) & 0xff;
 	        setupdata[4] = 0; // 0 - 1 stop bit, 1 - 1.5 stop bits, 2 - 2 stop bits
 	        setupdata[5] = 0; // 0 - None, 1 - Odd, 2 - Even, 3 - Mark, 4 - Space
 	        setupdata[6] = 8; // Data bits (5, 6, 7, 8 or 16)
 			mk_setup(setup, 0x21, 0x20, 0, interface, 7);
 			queue_Control_Transfer(device, &setup, setupdata, this);
 			control_queued = true;
-#endif
 		}
 		return;
 	}
