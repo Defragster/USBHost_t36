@@ -19,6 +19,7 @@ USBHIDParser hid4(myusb);
 USBHIDParser hid5(myusb);
 MouseController mouse1(myusb);
 JoystickController joystick1(myusb);
+RawHIDController rawhid1(myusb);
 
 USBDriver *drivers[] = {&hub1, &hub2, &hub3, &hub4, &keyboard1, &keyboard2, &hid1, &hid2, &hid3, &hid4, &hid5};
 #define CNT_DEVICES (sizeof(drivers)/sizeof(drivers[0]))
@@ -26,9 +27,9 @@ const char * driver_names[CNT_DEVICES] = {"Hub1","Hub2", "Hub3", "Hub4" "KB1", "
 bool driver_active[CNT_DEVICES] = {false, false, false, false};
 
 // Lets also look at HID Input devices
-USBHIDInput *hiddrivers[] = {&mouse1, &joystick1};
+USBHIDInput *hiddrivers[] = {&mouse1, &joystick1, &rawhid1};
 #define CNT_HIDDEVICES (sizeof(hiddrivers)/sizeof(hiddrivers[0]))
-const char * hid_driver_names[CNT_DEVICES] = {"Mouse1","Joystick1"};
+const char * hid_driver_names[CNT_DEVICES] = {"Mouse1","Joystick1", "RawHID1"};
 bool hid_driver_active[CNT_DEVICES] = {false, false};
 
 

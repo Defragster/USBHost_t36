@@ -143,10 +143,22 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 				// Unlike Audio, we need to look at Interface as our endpoints are after them...
 				if (type == 4 ) { // Interface - lets remember it's number...
 					interface = p[2];
+					println("    Interface: ", interface);
 				}
 				else if (type == 0x24) {  // 0x24 = CS_INTERFACE, 
 					uint32_t subtype = p[2];
-					println("    CS_INTERFACE - subtype: ", subtype);
+					print("    CS_INTERFACE - subtype: ", subtype);
+					if (len >= 4) print(" ", p[3], HEX);
+					if (len >= 5) print(" ", p[4], HEX);
+					if (len >= 6) print(" ", p[5], HEX);
+					switch (subtype) {
+						case 0: println(" - Header Functional Descriptor"); break;
+						case 1: println(" - Call Management Functional"); break;
+						case 2: println(" - Abstract Control Management"); break;
+						case 4: println(" - Telephone Ringer"); break;
+						case 6: println("  - union Functional"); break;
+						default: println(" - ??? other"); break; 
+					}
 					// First pass ignore...
 				} else if (type == 5) {
 					// endpoint descriptor
@@ -205,18 +217,12 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
 			baudrate = 115200;
 			// Wish I could just call Control to do the output... Maybe can defer until the user calls begin()
 			// control requires that device is setup which is not until this call completes...
-			println("Control - CDCACM LINE_CODING");
-			setupdata[0] = 0;  // Setup baud rate 115200 - 0x1C200
-			setupdata[1] = 0xc2;
-			setupdata[2] = 0x1;
-			setupdata[3] = 0;
-	        setupdata[4] = 0; // 0 - 1 stop bit, 1 - 1.5 stop bits, 2 - 2 stop bits
-	        setupdata[5] = 0; // 0 - None, 1 - Odd, 2 - Even, 3 - Mark, 4 - Space
-	        setupdata[6] = 8; // Data bits (5, 6, 7, 8 or 16)
-			mk_setup(setup, 0x21, 0x20, 0, interface, 7);
-			queue_Control_Transfer(dev, &setup, setupdata, this);
-			pending_control = 0x04;	// Maybe don't need to do...
+			println("Control - CDCACM DTR...");
+			// Need to setup  the data the line coding data
+			mk_setup(setup, 0x21, 0x22, 3, 0, 0);
+			queue_Control_Transfer(dev, &setup, NULL, this);
 			control_queued = true;
+			pending_control = 0x0;	// Maybe don't need to do...
 			return true;
 		}
 #if 0
@@ -350,7 +356,7 @@ bool USBSerial::claim(Device_t *dev, int type, const uint8_t *descriptors, uint3
     setupdata[4] = 0; // 0 - 1 stop bit, 1 - 1.5 stop bits, 2 - 2 stop bits
     setupdata[5] = 0; // 0 - None, 1 - Odd, 2 - Even, 3 - Mark, 4 - Space
     setupdata[6] = 8; // Data bits (5, 6, 7, 8 or 16)
-	mk_setup(setup, 0x21, 0x20, 0, interface, 7);
+	mk_setup(setup, 0x21, 0x20, 0, 0, 7);
 	queue_Control_Transfer(dev, &setup, setupdata, this);
 	pending_control = 0x04;	// Maybe don't need to do...
 	control_queued = true;
@@ -380,7 +386,8 @@ bool USBSerial::check_rxtx_ep(uint32_t &rxep, uint32_t &txep)
 // initialize buffer sizes and pointers
 bool USBSerial::init_buffers(uint32_t rsize, uint32_t tsize)
 {
-	// buffer must be able to hold 2 of each packet, plus have room to
+	// buffer must be able to hold 2 of each packet, plus buffer
+	// space to hold RX and TX data. 
 	if (sizeof(bigbuffer) < (rsize + tsize) * 3 + 2) return false;
 	rx1 = (uint8_t *)bigbuffer;
 	rx2 = rx1 + rsize;
@@ -436,7 +443,9 @@ void USBSerial::control(const Transfer_t *transfer)
 	        setupdata[4] = 0; // 0 - 1 stop bit, 1 - 1.5 stop bits, 2 - 2 stop bits
 	        setupdata[5] = 0; // 0 - None, 1 - Odd, 2 - Even, 3 - Mark, 4 - Space
 	        setupdata[6] = 8; // Data bits (5, 6, 7, 8 or 16)
-			mk_setup(setup, 0x21, 0x20, 0, interface, 7);
+	        print("CDCACM setup: ");
+	        print_hexbytes(&setupdata, 7);
+			mk_setup(setup, 0x21, 0x20, 0, 0, 7);
 			queue_Control_Transfer(device, &setup, setupdata, this);
 			control_queued = true;
 		}
@@ -626,6 +635,7 @@ void USBSerial::timer_event(USBDriverTimer *whichTimer)
 	uint32_t head = txhead;
 	uint32_t tail = txtail;
 	if (head == tail) {
+		println("  *** Empty ***");
 		return; // nothing to transmit
 	} else if (head > tail) {
 		count = head - tail;
@@ -641,6 +651,7 @@ void USBSerial::timer_event(USBDriverTimer *whichTimer)
 		txstate |= 0x02;
 	} else {
 		txtimer.start(1200);
+		println(" *** No buffers ***");
 		return; // no outgoing buffers available, try again later
 	}
 	if (++tail >= txsize) tail = 0;
@@ -656,6 +667,9 @@ void USBSerial::timer_event(USBDriverTimer *whichTimer)
 		tail = len - 1;
 	}
 	txtail = tail;
+	print("  TX data (", count);
+	print(") ");
+	print_hexbytes(p, count);
 	queue_Data_Transfer(txpipe, p, count, this);
 }
 

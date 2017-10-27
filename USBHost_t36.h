@@ -742,6 +742,32 @@ private:
 
 //--------------------------------------------------------------------------
 
+class RawHIDController : public USBHIDInput {
+public:
+	enum { RAWHID_MAX_LEN = 64 };
+	RawHIDController(USBHost &host, uint32_t topusage = 0xFFAB0200) : topusage_(topusage) { USBHIDParser::driver_ready_for_hid_collection(this); }
+	bool	available() { return rawEvent; }
+	uint8_t receiveData(uint8_t *rx_buffer, uint8_t size);
+	void 	sendData(uint8_t *tx_buffer, uint8_t size);
+	void	clear();
+protected:
+	virtual bool claim_collection(Device_t *dev, uint32_t topusage);
+	virtual void hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax);
+	virtual void hid_input_data(uint32_t usage, int32_t value);
+	virtual void hid_input_end();
+	virtual void disconnect_collection(Device_t *dev);
+private:
+	uint8_t collections_claimed = 0;
+	volatile bool rawEvent = false;
+	volatile bool hid_input_begin_ = false;
+	uint32_t topusage_;
+	uint8_t rxBuffer_[RAWHID_MAX_LEN];
+	uint8_t rx_buffer_index_ = 0;
+};
+
+
+//--------------------------------------------------------------------------
+
 class MIDIDevice : public USBDriver {
 public:
 	enum { SYSEX_MAX_LEN = 60 };
@@ -900,6 +926,7 @@ public:
 	virtual int read(void);
 	virtual int availableForWrite();
 	virtual size_t write(uint8_t c);
+
 	using Print::write;
 protected:
 	virtual bool claim(Device_t *device, int type, const uint8_t *descriptors, uint32_t len);
