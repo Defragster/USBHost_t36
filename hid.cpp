@@ -215,14 +215,22 @@ void USBHIDParser::in_data(const Transfer_t *transfer)
 	Serial.println(); */
 
 	print("HID: ");
+	print(use_report_id);
+	print(" - ");
 	print_hexbytes(transfer->buffer, transfer->length);
 	const uint8_t *buf = (const uint8_t *)transfer->buffer;
 	uint32_t len = transfer->length;
-	if (use_report_id == false) {
-		parse(0x0100, buf, len);
-	} else {
-		if (len > 1) {
-			parse(0x0100 | buf[0], buf + 1, len - 1);
+
+	// See if the first top report wishes to bypass the
+	// parse...
+	if (!(topusage_drivers[0] && topusage_drivers[0]->hid_input_data_bypass(buf, len))) {
+
+		if (use_report_id == false) {
+			parse(0x0100, buf, len);
+		} else {
+			if (len > 1) {
+				parse(0x0100 | buf[0], buf + 1, len - 1);
+			}
 		}
 	}
 	queue_Data_Transfer(in_pipe, report, in_size, this);
@@ -335,7 +343,7 @@ USBHIDInput * USBHIDParser::find_driver(uint32_t topusage)
 	USBHIDInput *driver = available_hid_drivers_list;
 	while (driver) {
 		println("  driver ", (uint32_t)driver, HEX);
-		if (driver->claim_collection(device, topusage)) {
+		if (driver->claim_collection(this, device, topusage)) {
 			return driver;
 		}
 		driver = driver->next;

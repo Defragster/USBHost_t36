@@ -26,7 +26,7 @@
 
 
 
-bool JoystickController::claim_collection(Device_t *dev, uint32_t topusage)
+bool JoystickController::claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage)
 {
 	// only claim Desktop/Joystick and Desktop/Gamepad
 	if (topusage != 0x10004 && topusage != 0x10005) return false;

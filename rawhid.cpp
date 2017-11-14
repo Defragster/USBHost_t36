@@ -26,78 +26,63 @@
 
 
 
-bool MouseController::claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage)
+bool RawHIDController::claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage)
 {
-	// only claim Desktop/Mouse
-	if (topusage != 0x10002) return false;
-	// only claim from one physical device
+	// only claim RAWHID devices currently: 16c0:0486
+#ifdef USBHOST_PRINT_DEBUG
+	Serial.printf("Rawhid Claim: %x:%x usage: %x\n", dev->idVendor, dev->idProduct, topusage);
+#endif
+
+	if ((dev->idVendor != 0x16c0 || (dev->idProduct) != 0x486)) return false;
 	if (mydevice != NULL && dev != mydevice) return false;
+	if (usage_  && (usage_ != topusage)) return false; 	// only claim one for now... 
 	mydevice = dev;
 	collections_claimed++;
+	usage_ = topusage;
+	driver_ = driver;	// remember the driver. 
 	return true;
 }
 
-void MouseController::disconnect_collection(Device_t *dev)
+void RawHIDController::disconnect_collection(Device_t *dev)
 {
 	if (--collections_claimed == 0) {
 		mydevice = NULL;
+		usage_ = 0;
 	}
 }
 
-void MouseController::hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax)
+bool RawHIDController::hid_input_data_bypass(const uint8_t *data, uint32_t len) 
 {
-	// TODO: check if absolute coordinates
+#ifdef USBHOST_PRINT_DEBUG
+	Serial.printf("RawHIDController::hid_input_data_bypass: %x\n", usage_);
+#endif
+
+	if (receiveCB) {
+		return (*receiveCB)(usage_, data, len);
+	}
+	return true;
+}
+
+void RawHIDController::hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax)
+{
+	Serial.printf("RawHID::hid_input_begin %x %x %x %x\n", topusage, type, lgmin, lgmax);
 	hid_input_begin_ = true;
 }
 
-void MouseController::hid_input_data(uint32_t usage, int32_t value)
+void RawHIDController::hid_input_data(uint32_t usage, int32_t value)
 {
-	//Serial.printf("Mouse: usage=%X, value=%d\n", usage, value);
-	uint32_t usage_page = usage >> 16;
-	usage &= 0xFFFF;
-	if (usage_page == 9 && usage >= 1 && usage <= 8) {
-		if (value == 0) {
-			buttons &= ~(1 << (usage -1));
-		} else {
-			buttons |= (1 << (usage -1));
-		}
-	} else if (usage_page == 1) {
-		switch (usage) {
-		  case 0x30:
-			mouseX = value;
-			break;
-		  case 0x31:
-			mouseY = value;
-			break;
-		  case 0x32: // Apple uses this for horizontal scroll
-			wheelH = value;
-			break;
-		  case 0x38:
-			wheel = value;
-			break;
-		}
-	} else if (usage_page == 12) {
-		if (usage == 0x238) { // Microsoft uses this for horizontal scroll
-			wheelH = value;
-		}
-	}
+	Serial.printf("RawHID: usage=%X, value=%d", usage, value);
+	if ((value >= ' ') && (value <='~')) Serial.printf("(%c)", value);
+	Serial.println();
 }
 
-void MouseController::hid_input_end()
+void RawHIDController::hid_input_end()
 {
+	Serial.println("RawHID::hid_input_end");
 	if (hid_input_begin_) {
 		mouseEvent = true;
 		hid_input_begin_ = false;
 	}
-}
-
-void MouseController::mouseDataClear() {
-	mouseEvent = false;
-	buttons = 0;
-	mouseX  = 0;
-	mouseY  = 0;
-	wheel   = 0;
-	wheelH  = 0;
 }
 
 

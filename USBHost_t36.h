@@ -56,7 +56,7 @@
 // your best effort to read chapter 4 before asking USB questions!
 
 
-//#define USBHOST_PRINT_DEBUG
+#define USBHOST_PRINT_DEBUG
 
 /************************************************/
 /*  Data Types                                  */
@@ -482,7 +482,8 @@ public:
 		{  return  ((mydevice == nullptr) || (mydevice->strbuf == nullptr)) ? nullptr : &mydevice->strbuf->buffer[mydevice->strbuf->iStrings[strbuf_t::STR_ID_SERIAL]]; }
 
 private:
-	virtual bool claim_collection(Device_t *dev, uint32_t topusage);
+	virtual bool claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage);
+	virtual bool hid_input_data_bypass(const uint8_t *data, uint32_t len) {return false;}
 	virtual void hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax);
 	virtual void hid_input_data(uint32_t usage, int32_t value);
 	virtual void hid_input_end();
@@ -686,7 +687,7 @@ public:
 	enum {MAX_KEYS_DOWN=4};
 //	uint32_t buttons() { return buttons_; }
 protected:
-	virtual bool claim_collection(Device_t *dev, uint32_t topusage);
+	virtual bool claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage);
 	virtual void hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax);
 	virtual void hid_input_data(uint32_t usage, int32_t value);
 	virtual void hid_input_end();
@@ -716,7 +717,7 @@ public:
 	int     getWheel() { return wheel; }
 	int     getWheelH() { return wheelH; }
 protected:
-	virtual bool claim_collection(Device_t *dev, uint32_t topusage);
+	virtual bool claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage);
 	virtual void hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax);
 	virtual void hid_input_data(uint32_t usage, int32_t value);
 	virtual void hid_input_end();
@@ -742,7 +743,7 @@ public:
 	uint32_t getButtons() { return buttons; }
 	int	getAxis(uint32_t index) { return (index < (sizeof(axis)/sizeof(axis[0]))) ? axis[index] : 0; }
 protected:
-	virtual bool claim_collection(Device_t *dev, uint32_t topusage);
+	virtual bool claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage);
 	virtual void hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax);
 	virtual void hid_input_data(uint32_t usage, int32_t value);
 	virtual void hid_input_end();
@@ -1204,5 +1205,29 @@ private:
 	uint16_t wheelCircumference; // default is WHEEL_CIRCUMFERENCE (2122cm)
 };
 
+//--------------------------------------------------------------------------
+
+class RawHIDController : public USBHIDInput {
+public:
+	RawHIDController(USBHost &host, uint32_t usage = 0) : usage_(usage) { USBHIDParser::driver_ready_for_hid_collection(this); }
+	uint32_t usage(void) {return usage_;}
+	void attachReceive(bool (*f)(uint32_t usage, const uint8_t *data, uint32_t len)) {receiveCB = f;}
+protected:
+	virtual bool claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage);
+	virtual bool hid_input_data_bypass(const uint8_t *data, uint32_t len);
+	virtual void hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax);
+	virtual void hid_input_data(uint32_t usage, int32_t value);
+	virtual void hid_input_end();
+	virtual void disconnect_collection(Device_t *dev);
+private:
+	USBHIDParser *driver_;
+	enum { MAX_PACKET_SIZE = 64 };
+	bool (*receiveCB)(uint32_t usage, const uint8_t *data, uint32_t len) = nullptr;
+	uint8_t collections_claimed = 0;
+	volatile bool mouseEvent = false;
+	volatile bool hid_input_begin_ = false;
+	uint32_t usage_;
+	uint8_t	rx_tx_extra_buffers[MAX_PACKET_SIZE*3];
+};
 
 #endif
