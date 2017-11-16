@@ -128,6 +128,20 @@ void loop()
     Serial.println();
     joystick1.joystickDataClear();
   }
+
+  // See if we have some RAW data
+  if (rawhid1) {
+    int ch;
+    uint8_t buffer[64];
+    uint8_t count_chars = 0; 
+    memset(buffer, 0, sizeof(buffer));
+    if (Serial.available()) {
+      while (((ch = Serial.read()) != -1) && (count_chars < sizeof(buffer))) {
+        buffer[count_chars++] = ch;
+      }
+      rawhid1.sendPacket(buffer);
+    }
+  }
 }
 
 

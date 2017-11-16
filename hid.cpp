@@ -128,21 +128,19 @@ bool USBHIDParser::claim(Device_t *dev, int type, const uint8_t *descriptors, ui
 		if (((endpoint1 & 0xF0) == 0x80) && ((endpoint2 & 0xF0) == 0)) {
 			// first endpoint is IN, second endpoint is OUT
 			in_pipe = new_Pipe(dev, 3, endpoint1 & 0x0F, 1, size1, interval1);
-			//out_pipe = new_Pipe(dev, 3, endpoint2, 0, size2, interval2);
-			out_pipe = NULL; // TODO; fixme
+			out_pipe = new_Pipe(dev, 3, endpoint2, 0, size2, interval2);
 			in_size = size1;
 			out_size = size2;
 		} else if (((endpoint1 & 0xF0) == 0) && ((endpoint2 & 0xF0) == 0x80)) {
 			// first endpoint is OUT, second endpoint is IN
 			in_pipe = new_Pipe(dev, 3, endpoint2 & 0x0F, 1, size2, interval2);
-			//out_pipe = new_Pipe(dev, 3, endpoint1, 0, size1, interval1);
-			out_pipe = NULL; // TODO; fixme
+			out_pipe = new_Pipe(dev, 3, endpoint1, 0, size1, interval1);
 			in_size = size2;
 			out_size = size1;
 		} else {
 			return false;
 		}
-		//out_pipe->callback_function = out_callback;
+		out_pipe->callback_function = out_callback;
 	}
 	in_pipe->callback_function = in_callback;
 	for (uint32_t i=0; i < TOPUSAGE_LIST_LEN; i++) {
@@ -185,6 +183,7 @@ void USBHIDParser::in_callback(const Transfer_t *transfer)
 
 void USBHIDParser::out_callback(const Transfer_t *transfer)
 {
+	//println("USBHIDParser:: out_callback (static)");
 	if (transfer->driver) {
 		((USBHIDParser*)(transfer->driver))->out_data(transfer);
 	}
@@ -223,7 +222,7 @@ void USBHIDParser::in_data(const Transfer_t *transfer)
 
 	// See if the first top report wishes to bypass the
 	// parse...
-	if (!(topusage_drivers[0] && topusage_drivers[0]->hid_input_data_bypass(buf, len))) {
+	if (!(topusage_drivers[0] && topusage_drivers[0]->hid_process_in_data(transfer))) {
 
 		if (use_report_id == false) {
 			parse(0x0100, buf, len);
@@ -239,7 +238,43 @@ void USBHIDParser::in_data(const Transfer_t *transfer)
 
 void USBHIDParser::out_data(const Transfer_t *transfer)
 {
+	println("USBHIDParser:out_data called (instance)");
+	// A packet completed. lets mark it as done and call back
+	// to top reports handler.  We unmark our checkmark to
+	// handle case where they may want to queue up another one. 
+	if (transfer->buffer == tx1) txstate &= ~1;
+	if (transfer->buffer == tx2) txstate &= ~2;
+	if (topusage_drivers[0]) {
+		topusage_drivers[0]->hid_process_out_data(transfer);
+	}
 }
+
+bool USBHIDParser::sendPacket(const uint8_t *buffer) {
+	if (!out_size || !out_pipe) return false;	
+	if (!tx1) {
+		// Was not init before, for now lets put it at end of descriptor
+		// TODO: should verify that either don't exceed overlap descsize
+		//       Or that we have taken over this device
+		tx1 = &descriptor[sizeof(descriptor) - out_size];
+		tx2 = tx1 - out_size;
+	}
+	if ((txstate & 3) == 3) return false; 	// both transmit buffers are full
+	uint8_t *p = tx1;
+	if ((txstate & 1) == 0) {
+		txstate |= 1;
+	} else {
+		txstate |= 2;
+		p = tx2;
+	}
+	// copy the users data into our out going buffer
+	memcpy(p, buffer, out_size);	
+	println("USBHIDParser Send packet");
+	print_hexbytes(buffer, out_size);
+	queue_Data_Transfer(out_pipe, p, out_size, this);
+	println("    Queue_data transfer returned");
+	return true;
+}
+
 
 // This no-inputs parse is meant to be used when we first get the
 // HID report descriptor.  It finds all the top level collections
@@ -341,9 +376,11 @@ USBHIDInput * USBHIDParser::find_driver(uint32_t topusage)
 {
 	println("find_driver");
 	USBHIDInput *driver = available_hid_drivers_list;
+	hidclaim_t claim_type;
 	while (driver) {
 		println("  driver ", (uint32_t)driver, HEX);
-		if (driver->claim_collection(this, device, topusage)) {
+		if ((claim_type = driver->claim_collection(this, device, topusage)) != CLAIM_NO) {
+			if (claim_type == CLAIM_DEVICE) hid_driver_claimed_control_ = true;
 			return driver;
 		}
 		driver = driver->next;
