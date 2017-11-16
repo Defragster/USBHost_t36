@@ -270,11 +270,12 @@ protected:
 	static void disconnect_Device(Device_t *dev);
 	static void enumeration(const Transfer_t *transfer);
 	static void driver_ready_for_device(USBDriver *driver);
+	static volatile bool enumeration_busy;
+public: // Maybe others may want/need to contribute memory example HID devices may want to add transfers.
 	static void contribute_Devices(Device_t *devices, uint32_t num);
 	static void contribute_Pipes(Pipe_t *pipes, uint32_t num);
 	static void contribute_Transfers(Transfer_t *transfers, uint32_t num);
 	static void contribute_String_Buffers(strbuf_t *strbuf, uint32_t num);
-	static volatile bool enumeration_busy;
 private:
 	static void isr();
 	static void convertStringDescriptorToASCIIString(uint8_t string_index, Device_t *dev, const Transfer_t *transfer);
@@ -1227,7 +1228,7 @@ private:
 
 class RawHIDController : public USBHIDInput {
 public:
-	RawHIDController(USBHost &host, uint32_t usage = 0) : usage_(usage) { USBHIDParser::driver_ready_for_hid_collection(this); }
+	RawHIDController(USBHost &host, uint32_t usage = 0) : usage_(usage) { init(); }
 	uint32_t usage(void) {return usage_;}
 	void attachReceive(bool (*f)(uint32_t usage, const uint8_t *data, uint32_t len)) {receiveCB = f;}
 	bool sendPacket(const uint8_t *buffer);
@@ -1240,6 +1241,7 @@ protected:
 	virtual void hid_input_end();
 	virtual void disconnect_collection(Device_t *dev);
 private:
+	void init();
 	USBHIDParser *driver_;
 	enum { MAX_PACKET_SIZE = 64 };
 	bool (*receiveCB)(uint32_t usage, const uint8_t *data, uint32_t len) = nullptr;
@@ -1248,6 +1250,10 @@ private:
 	volatile bool hid_input_begin_ = false;
 	uint32_t usage_;
 	uint8_t	rx_tx_extra_buffers[MAX_PACKET_SIZE*3];
+
+	// See if we can contribute transfers
+	Transfer_t mytransfers[2] __attribute__ ((aligned(32)));
+
 };
 
 #endif

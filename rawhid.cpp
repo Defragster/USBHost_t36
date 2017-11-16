@@ -24,7 +24,11 @@
 #include <Arduino.h>
 #include "USBHost_t36.h"  // Read this header first for key info
 
-
+void RawHIDController::init()
+{
+	USBHost::contribute_Transfers(mytransfers, sizeof(mytransfers)/sizeof(Transfer_t));
+	USBHIDParser::driver_ready_for_hid_collection(this);	
+}
 
 hidclaim_t RawHIDController::claim_collection(USBHIDParser *driver, Device_t *dev, uint32_t topusage)
 {
