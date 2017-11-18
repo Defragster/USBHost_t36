@@ -39,12 +39,13 @@ hidclaim_t RawHIDController::claim_collection(USBHIDParser *driver, Device_t *de
 
 	if ((dev->idVendor != 0x16c0 || (dev->idProduct) != 0x486)) return CLAIM_NO;
 	if (mydevice != NULL && dev != mydevice) return CLAIM_NO;
-	if (usage_  && (usage_ != topusage)) return CLAIM_NO; 	// only claim one for now... 
+	if (usage_) return CLAIM_NO;			// Only claim one
+	if (fixed_usage_  && (fixed_usage_ != topusage)) return CLAIM_NO; 	// See if we want specific one and if so is it this one
 	mydevice = dev;
 	collections_claimed++;
 	usage_ = topusage;
 	driver_ = driver;	// remember the driver. 
-	return CLAIM_DEVICE;  // We wa
+	return CLAIM_INTERFACE;  // We wa
 }
 
 void RawHIDController::disconnect_collection(Device_t *dev)
@@ -85,24 +86,35 @@ bool RawHIDController::sendPacket(const uint8_t *buffer)
 
 void RawHIDController::hid_input_begin(uint32_t topusage, uint32_t type, int lgmin, int lgmax)
 {
+	// These should not be called as we are claiming the whole interface and not
+	// allowing the parse to happen
+#ifdef USBHOST_PRINT_DEBUG
 	Serial.printf("RawHID::hid_input_begin %x %x %x %x\n", topusage, type, lgmin, lgmax);
-	hid_input_begin_ = true;
+#endif
+	//hid_input_begin_ = true;
 }
 
 void RawHIDController::hid_input_data(uint32_t usage, int32_t value)
 {
+	// These should not be called as we are claiming the whole interface and not
+	// allowing the parse to happen
+#ifdef USBHOST_PRINT_DEBUG
 	Serial.printf("RawHID: usage=%X, value=%d", usage, value);
 	if ((value >= ' ') && (value <='~')) Serial.printf("(%c)", value);
 	Serial.println();
+#endif
 }
 
 void RawHIDController::hid_input_end()
 {
+	// These should not be called as we are claiming the whole interface and not
+	// allowing the parse to happen
+#ifdef USBHOST_PRINT_DEBUG
 	Serial.println("RawHID::hid_input_end");
-	if (hid_input_begin_) {
-		mouseEvent = true;
-		hid_input_begin_ = false;
-	}
+#endif
+//	if (hid_input_begin_) {
+//		hid_input_begin_ = false;
+//	}
 }
 
 

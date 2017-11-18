@@ -380,7 +380,7 @@ USBHIDInput * USBHIDParser::find_driver(uint32_t topusage)
 	while (driver) {
 		println("  driver ", (uint32_t)driver, HEX);
 		if ((claim_type = driver->claim_collection(this, device, topusage)) != CLAIM_NO) {
-			if (claim_type == CLAIM_DEVICE) hid_driver_claimed_control_ = true;
+			if (claim_type == CLAIM_INTERFACE) hid_driver_claimed_control_ = true;
 			return driver;
 		}
 		driver = driver->next;

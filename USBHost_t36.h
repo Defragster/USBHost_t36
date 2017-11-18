@@ -80,7 +80,7 @@ class USBHost;
 typedef struct Device_struct       Device_t;
 typedef struct Pipe_struct         Pipe_t;
 typedef struct Transfer_struct     Transfer_t;
-typedef enum { CLAIM_NO=0, CLAIM_REPORT, CLAIM_DEVICE} hidclaim_t;
+typedef enum { CLAIM_NO=0, CLAIM_REPORT, CLAIM_INTERFACE} hidclaim_t;
 
 // All USB device drivers inherit use these classes.
 // Drivers build user-visible functionality on top
@@ -1228,7 +1228,7 @@ private:
 
 class RawHIDController : public USBHIDInput {
 public:
-	RawHIDController(USBHost &host, uint32_t usage = 0) : usage_(usage) { init(); }
+	RawHIDController(USBHost &host, uint32_t usage = 0) : fixed_usage_(usage) { init(); }
 	uint32_t usage(void) {return usage_;}
 	void attachReceive(bool (*f)(uint32_t usage, const uint8_t *data, uint32_t len)) {receiveCB = f;}
 	bool sendPacket(const uint8_t *buffer);
@@ -1246,10 +1246,9 @@ private:
 	enum { MAX_PACKET_SIZE = 64 };
 	bool (*receiveCB)(uint32_t usage, const uint8_t *data, uint32_t len) = nullptr;
 	uint8_t collections_claimed = 0;
-	volatile bool mouseEvent = false;
-	volatile bool hid_input_begin_ = false;
-	uint32_t usage_;
-	uint8_t	rx_tx_extra_buffers[MAX_PACKET_SIZE*3];
+	//volatile bool hid_input_begin_ = false;
+	uint32_t fixed_usage_;
+	uint32_t usage_ = 0;
 
 	// See if we can contribute transfers
 	Transfer_t mytransfers[2] __attribute__ ((aligned(32)));
